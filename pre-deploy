@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+source "$PLUGIN_CORE_AVAILABLE_PATH/config/functions"
+source "$PLUGIN_AVAILABLE_PATH/ps/functions"
+
+dokku_proctype_filter_pre_deploy_trigger() {
+  local desc="dokku proctype filter pre-deploy trigger"
+  local APP="$1"; local IMAGE_TAG="$2"; local IMAGE; local DOKKU_PROCTYPE_FILTER
+  local DOKKU_SCALE_FILE="$DOKKU_ROOT/$APP/DOKKU_SCALE"
+  IMAGE=$(get_app_image_name "$APP" "$IMAGE_TAG")
+  DOKKU_PROCTYPE_FILTER=$(config_get "$APP" DOKKU_PROCTYPE_FILTER || true)
+
+  if [[ -n "$DOKKU_PROCTYPE_FILTER" ]]; then
+    extract_procfile "$APP" &> /dev/null || true
+    generate_scale_file "$APP" &> /dev/null || true
+
+    local proctype
+    for proctype in $DOKKU_PROCTYPE_FILTER; do
+      sed --in-place "s/^${proctype}=.*//g" "$DOKKU_SCALE_FILE"
+    done
+  fi
+}
+
+dokku_proctype_filter_pre_deploy_trigger "$@"

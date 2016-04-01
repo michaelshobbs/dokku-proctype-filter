@@ -1,0 +1,6 @@
+[plugin]
+name = "dokku-proctype-filter"
+description = "Only run Procfile types from ENV var"
+version = "0.1.0"
+website_url = "https://github.com/expa/dokku-proctype-filter"
+[plugin.config]
