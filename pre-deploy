@@ -1,23 +1,50 @@
 #!/usr/bin/env bash
 set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+source "$PLUGIN_CORE_AVAILABLE_PATH/common/functions"
 source "$PLUGIN_CORE_AVAILABLE_PATH/config/functions"
 source "$PLUGIN_AVAILABLE_PATH/ps/functions"
 
+does_image_file_exist() {
+  local IMAGE="$1"; local FILE_PATH="$2"; local RC
+  if docker run --rm --entrypoint="/bin/sh" "$IMAGE" -c "test -f $FILE_PATH"; then
+    RC=0
+  else
+    RC=1
+  fi
+
+  return $RC
+}
+
 dokku_proctype_filter_pre_deploy_trigger() {
   local desc="dokku proctype filter pre-deploy trigger"
-  local APP="$1"; local IMAGE_TAG="$2"; local IMAGE; local DOKKU_PROCTYPE_FILTER
+  local APP="$1"; local IMAGE_TAG="$2"; local IMAGE
+  local DOKKU_PROCTYPE_FILTER; local SCALE_FILE
   local DOKKU_SCALE_FILE="$DOKKU_ROOT/$APP/DOKKU_SCALE"
+  local IMAGE_SCALE_FILE="/app/DOKKU_SCALE"
   IMAGE=$(get_app_image_name "$APP" "$IMAGE_TAG")
   DOKKU_PROCTYPE_FILTER=$(config_get "$APP" DOKKU_PROCTYPE_FILTER || true)
 
   if [[ -n "$DOKKU_PROCTYPE_FILTER" ]]; then
-    extract_procfile "$APP" &> /dev/null || true
-    generate_scale_file "$APP" &> /dev/null || true
-
-    local proctype
-    for proctype in $DOKKU_PROCTYPE_FILTER; do
-      sed --in-place "s/^${proctype}=.*//g" "$DOKKU_SCALE_FILE"
-    done
+    local COMMAND; local DOKKU_PROCTYPE_FILTER_REGEX
+    DOKKU_PROCTYPE_FILTER_REGEX="$(sed -r -e 's/([[:graph:]]+)[[:blank:]]?/^\1=|/g' <<< "$DOKKU_PROCTYPE_FILTER"| sed -e 's/|$//g')"
+    COMMAND="egrep \"$DOKKU_PROCTYPE_FILTER_REGEX\" \$SCALE_FILE > /tmp/DOKKU_SCALE.tmp ; "
+    COMMAND+="mv -f /tmp/DOKKU_SCALE.tmp \$SCALE_FILE"
+    if does_image_file_exist "$IMAGE" "$IMAGE_SCALE_FILE"; then
+      dokku_log_info1 "DOKKU_SCALE file found in container and DOKKU_PROCTYPE_FILTER defined"
+      dokku_log_info1 "scaling Procfile types -> $DOKKU_PROCTYPE_FILTER"
+      local cid;
+      cid=$(docker run -d -e SCALE_FILE="$IMAGE_SCALE_FILE" "$IMAGE" /bin/bash -c "$COMMAND")
+      if [[ "$(docker wait "$cid")" -eq 0 ]]; then
+        docker commit "$cid" "$IMAGE" > /dev/null
+      else
+        dokku_container_log_verbose_quiet "$cid"
+        dokku_log_fail "proctype filtering failed!"
+      fi
+    else
+      dokku_log_info1 "scaling Procfile types -> $DOKKU_PROCTYPE_FILTER"
+      SCALE_FILE="$DOKKU_SCALE_FILE"
+      eval "$COMMAND"
+    fi
   fi
 }
 
