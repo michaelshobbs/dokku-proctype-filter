@@ -4,7 +4,7 @@ dokku-proctype-filter is a plugin for [dokku][dokku] that only runs Procfile pro
 
 ## Requirements
 
-This plugin uses the `pre-deploy-*` trigger to modify the `DOKKU_SCALE` file to only run Procfile processes defined by the `DOKKU_PROCFILE_FILTER` environment variable.
+This plugin uses the `pre-deploy` trigger to modify the `DOKKU_SCALE` file to only run Procfile processes defined by the `DOKKU_PROCFILE_FILTER` environment variable.
 
 ## Installation & Example
 
