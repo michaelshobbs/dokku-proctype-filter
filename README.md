@@ -11,7 +11,7 @@ This plugin uses the `pre-deploy` trigger to modify the `DOKKU_SCALE` file to on
 ```sh
 # Install the plugin:
 # dokku 0.4+
-dokku plugin:install https://github.com/expa/dokku-proctype-filter.git
+dokku plugin:install https://github.com/michaelshobbs/dokku-proctype-filter.git
 
 dokku config:set <app> DOKKU_PROCFILE_FILTER="web worker"
 dokku ps:restart <app>
