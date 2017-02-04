@@ -5,7 +5,11 @@ source "$PLUGIN_CORE_AVAILABLE_PATH/config/functions"
 source "$PLUGIN_AVAILABLE_PATH/ps/functions"
 
 does_image_file_exist() {
+  local desc="determine if file path exists in an image"
   local IMAGE="$1"; local FILE_PATH="$2"; local RC
+  if [[ -z "$IMAGE" ]] || [[ -z "$FILE_PATH" ]]; then
+    return 1
+  fi
   if docker run --rm --entrypoint="/bin/sh" "$IMAGE" -c "test -f $FILE_PATH"; then
     RC=0
   else
@@ -15,17 +19,30 @@ does_image_file_exist() {
   return $RC
 }
 
+find_dokku_scale_file() {
+  local desc="find DOKKU_SCALE in an image"
+  local IMAGE="$1" SCALE_FILE_IMAGE_PATH WORKDIR
+  WORKDIR=$(docker inspect -f '{{.Config.WorkingDir}}' "$IMAGE")
+  [[ -z "$WORKDIR" ]] && local WORKDIR=/app
+  local IMAGE_SCALE_FILE="${WORKDIR}/DOKKU_SCALE"
+
+  if does_image_file_exist "$IMAGE" "$IMAGE_SCALE_FILE"; then
+    SCALE_FILE_IMAGE_PATH="$IMAGE_SCALE_FILE"
+  fi
+  echo "$SCALE_FILE_IMAGE_PATH"
+}
+
 dokku_proctype_filter_pre_deploy_trigger() {
   local desc="dokku proctype filter pre-deploy trigger"
-  local APP="$1"; local IMAGE_TAG="$2"; local IMAGE
+  local APP="$1"; local IMAGE_TAG="$2"; local IMAGE IMAGE_SCALE_FILE
   local DOKKU_PROCTYPE_FILTER; local SCALE_FILE
   local DOKKU_SCALE_FILE="$DOKKU_ROOT/$APP/DOKKU_SCALE"
-  local IMAGE_SCALE_FILE="/app/DOKKU_SCALE"
   IMAGE=$(get_app_image_name "$APP" "$IMAGE_TAG")
   DOKKU_PROCTYPE_FILTER=$(config_get "$APP" DOKKU_PROCTYPE_FILTER || true)
 
   if [[ -n "$DOKKU_PROCTYPE_FILTER" ]]; then
     local COMMAND; local DOKKU_PROCTYPE_FILTER_REGEX
+    IMAGE_SCALE_FILE=$(find_dokku_scale_file "$IMAGE")
     DOKKU_PROCTYPE_FILTER_REGEX="$(sed -r -e 's/([[:graph:]]+)[[:blank:]]?/^\1=|/g' <<< "$DOKKU_PROCTYPE_FILTER"| sed -e 's/|$//g')"
     COMMAND="egrep \"$DOKKU_PROCTYPE_FILTER_REGEX\" \$SCALE_FILE > /tmp/DOKKU_SCALE.tmp ; "
     COMMAND+="mv -f /tmp/DOKKU_SCALE.tmp \$SCALE_FILE"
@@ -40,10 +57,12 @@ dokku_proctype_filter_pre_deploy_trigger() {
         dokku_container_log_verbose_quiet "$cid"
         dokku_log_fail "proctype filtering failed!"
       fi
-    else
+    elif [[ -f "$DOKKU_SCALE_FILE" ]]; then
       dokku_log_info1 "scaling Procfile types -> $DOKKU_PROCTYPE_FILTER"
       SCALE_FILE="$DOKKU_SCALE_FILE"
       eval "$COMMAND"
+    else
+      dokku_log_info1 "DOKKU_SCALE file not found. skipping proctype filtering!"
     fi
   fi
 }
