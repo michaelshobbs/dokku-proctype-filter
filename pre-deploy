@@ -50,7 +50,8 @@ dokku_proctype_filter_pre_deploy_trigger() {
       dokku_log_info1 "DOKKU_SCALE file found in container and DOKKU_PROCTYPE_FILTER defined"
       dokku_log_info1 "scaling Procfile types -> $DOKKU_PROCTYPE_FILTER"
       local cid;
-      cid=$(docker run -d -e SCALE_FILE="$IMAGE_SCALE_FILE" "$IMAGE" /bin/bash -c "$COMMAND")
+      # shellcheck disable=SC2086
+      cid=$(docker run $DOKKU_GLOBAL_RUN_ARGS -d -e SCALE_FILE="$IMAGE_SCALE_FILE" "$IMAGE" /bin/bash -c "$COMMAND")
       if [[ "$(docker wait "$cid")" -eq 0 ]]; then
         docker commit "$cid" "$IMAGE" > /dev/null
       else
